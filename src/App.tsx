@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import {
   LayoutDashboard, List, FileText, LogOut, Search, Trash2, Edit, Plus, X,
   ArrowUpDown, Users, FileUp, UploadCloud, FileSpreadsheet, CheckCircle,
-  Link, RefreshCw, Shield, UserPlus, Download, Database, Trash, Settings
+  Link, RefreshCw, Shield, UserPlus, Download, Database, Trash, Settings, AlertTriangle
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -22,7 +22,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// --- HELPERS ---
+// --- INDIAN DATE STANDARDS (DD/MM/YY) ---
 const toIndianDate = (dateStr) => {
   if (!dateStr) return "";
   if (/^\d{2}\/\d{2}\/\d{2}$/.test(dateStr)) return dateStr;
@@ -83,9 +83,9 @@ export default function App() {
   useEffect(() => {
     let isMounted = true;
     const boot = async () => {
-      const init = async (key, setter, defaultVal = []) => {
+      const init = async (key, setter) => {
         const ref = doc(db, "btc_data", key);
-        onSnapshot(ref, (d) => { if (d.exists() && isMounted) setter(d.data().list || defaultVal); });
+        onSnapshot(ref, (d) => { if (d.exists() && isMounted) setter(d.data().list || []); });
       };
       await init("users", setUsersList);
       await init("cheques", setCheques);
@@ -98,8 +98,6 @@ export default function App() {
       const confRef = doc(db, "btc_data", "config");
       const confSnap = await getDoc(confRef);
       if (confSnap.exists()) setConfig(confSnap.data());
-      else await setDoc(confRef, { companyName: "Barnala Trading Co", variance: 5 });
-
       setIsDbReady(true);
     };
     boot();
@@ -109,29 +107,29 @@ export default function App() {
   const save = (key, list) => setDoc(doc(db, "btc_data", key), { list });
   const saveConfig = (newConf) => { setConfig(newConf); setDoc(doc(db, "btc_data", "config"), newConf); };
 
-  const log = (action, record, details) => {
+  const logAction = (action, record, details) => {
     const now = new Date();
     const timeStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth()+1).padStart(2, '0')}/${String(now.getFullYear()).slice(-2)} ${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
     save("auditTrail", [{ id: Date.now(), time: timeStr, user: currentUser?.username || "System", action, record, details }, ...auditTrail].slice(0, 1000));
   };
 
-  if (!isDbReady) return <div className="h-screen flex items-center justify-center bg-slate-900 text-white font-black animate-pulse uppercase tracking-[0.5em]">BTC Cloud Syncing...</div>;
+  if (!isDbReady) return <div className="h-screen flex items-center justify-center bg-slate-900 text-white font-black animate-pulse uppercase tracking-[0.5em]">BTC Cloud Synchronizing...</div>;
 
-  // --- LOGIN ---
+  // --- AUTH PORTAL ---
   if (!currentUser) return (
     <div className="h-screen flex items-center justify-center bg-slate-200">
-      <div className="bg-white p-12 rounded-[3rem] shadow-2xl w-full max-w-sm border-t-[14px] border-slate-900 text-center">
+      <div className="bg-white p-12 rounded-[3rem] shadow-2xl w-full max-w-sm border-t-[14px] border-slate-900 text-center font-sans">
         <div className="bg-slate-900 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl"><Shield size={32} className="text-blue-400"/></div>
         <h1 className="text-2xl font-black mb-1 text-slate-900 uppercase italic tracking-tighter">{config.companyName}</h1>
         <p className="text-[10px] text-slate-400 uppercase tracking-[0.3em] mb-10 font-black italic">Security Authentication</p>
         <form onSubmit={e => {
           e.preventDefault();
           const u = usersList.find(x => x.username === e.target.u.value.toLowerCase().trim() && x.password === e.target.p.value);
-          if (u) { if (u.active) { setCurrentUser(u); log("Login", "Auth", "Success"); } else alert("Disabled"); } else alert("Access Denied");
+          if (u) { if (u.active) { setCurrentUser(u); } else alert("Disabled"); } else alert("Credentials Denied");
         }}>
-          <input name="u" placeholder="Admin ID" className="w-full bg-slate-50 border-0 p-4 rounded-2xl mb-4 text-center text-xs font-black tracking-widest ring-1 ring-slate-100 outline-none focus:ring-2 focus:ring-slate-900" />
-          <input name="p" type="password" placeholder="Passkey" className="w-full bg-slate-50 border-0 p-4 rounded-2xl mb-10 text-center text-xs font-black tracking-widest ring-1 ring-slate-100 outline-none focus:ring-2 focus:ring-slate-900" />
-          <button className="w-full bg-slate-900 text-white p-5 rounded-2xl font-black tracking-widest hover:bg-black transition-all">SIGN IN</button>
+          <input name="u" placeholder="ADMIN ID" className="w-full bg-slate-50 border-0 p-5 rounded-3xl mb-4 text-center text-xs font-black tracking-widest ring-1 ring-slate-100 outline-none focus:ring-2 focus:ring-slate-900" />
+          <input name="p" type="password" placeholder="PASSKEY" className="w-full bg-slate-50 border-0 p-5 rounded-3xl mb-10 text-center text-xs font-black tracking-widest ring-1 ring-slate-100 outline-none focus:ring-2 focus:ring-slate-900" />
+          <button className="w-full bg-slate-900 text-white p-6 rounded-[2rem] font-black tracking-widest hover:bg-black transition-all">AUTHENTICATE</button>
         </form>
       </div>
     </div>
@@ -145,13 +143,13 @@ export default function App() {
     const cleared = active.filter(c => c.status === "Cleared").reduce((a, b) => a + Number(b.amount), 0);
     const pending = active.filter(c => c.status === "Pending").reduce((a, b) => a + Number(b.amount), 0);
     return (
-      <div className="p-10">
-        <h2 className="text-3xl font-black text-slate-800 tracking-tighter mb-8 italic">Business Overview</h2>
-        <div className="grid grid-cols-4 gap-8">
+      <div className="p-10 w-full">
+        <h2 className="text-3xl font-black text-slate-800 tracking-tighter mb-8 italic">Operation Control Dashboard</h2>
+        <div className="grid grid-cols-4 gap-8 w-full">
           <div className="bg-white p-8 rounded-[2rem] shadow-2xl border-l-[12px] border-green-500"><h3 className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">Total Cleared</h3><p className="text-3xl font-black text-slate-900">{formatCurrency(cleared)}</p></div>
           <div className="bg-white p-8 rounded-[2rem] shadow-2xl border-l-[12px] border-yellow-500"><h3 className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">Total Pending</h3><p className="text-3xl font-black text-slate-900">{formatCurrency(pending)}</p></div>
-          <div className="bg-white p-8 rounded-[2rem] shadow-2xl border-l-[12px] border-blue-500"><h3 className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">Bank Records</h3><p className="text-3xl font-black text-slate-900">{bankData.length}</p></div>
-          <div className="bg-white p-8 rounded-[2rem] shadow-2xl border-l-[12px] border-purple-500"><h3 className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">Tally Vouchers</h3><p className="text-3xl font-black text-slate-900">{tallyData.length}</p></div>
+          <div className="bg-white p-8 rounded-[2rem] shadow-2xl border-l-[12px] border-blue-500"><h3 className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">Bank Data</h3><p className="text-3xl font-black text-slate-900">{bankData.length} records</p></div>
+          <div className="bg-white p-8 rounded-[2rem] shadow-2xl border-l-[12px] border-purple-500"><h3 className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">Tally Vouchers</h3><p className="text-3xl font-black text-slate-900">{tallyData.length} records</p></div>
         </div>
       </div>
     );
@@ -198,41 +196,40 @@ export default function App() {
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-black text-slate-800 tracking-tighter italic">Reconciliation Workspace</h2>
           <div className="flex space-x-3">
-            <button onClick={() => window.location.reload()} className="bg-white border shadow-sm px-4 py-2 rounded-xl text-sm font-bold flex items-center hover:bg-slate-50"><RefreshCw size={16} className="mr-2"/> Sync Engine</button>
-            <div className="relative"><Search className="absolute left-3 top-2.5 text-slate-400" size={16}/><input placeholder="Search records..." className="pl-10 border shadow-sm p-2 rounded-xl text-sm w-80 outline-none" onChange={e => setQ(e.target.value)}/></div>
-            <button onClick={() => alert("Select a row link icon below to map manually")} className="bg-indigo-600 text-white px-5 py-2 rounded-xl text-sm font-black shadow-lg"><Link size={16} className="inline mr-2"/> Manual Link</button>
+            <button onClick={() => window.location.reload()} className="bg-white border shadow-sm px-4 py-2 rounded-xl text-sm font-bold flex items-center hover:bg-slate-50 transition-all"><RefreshCw size={16} className="mr-2"/> Sync Engine</button>
+            <div className="relative"><Search className="absolute left-3 top-2.5 text-slate-400" size={16}/><input placeholder="Search..." className="pl-10 border shadow-sm p-2 rounded-xl text-sm w-80 outline-none" onChange={e => setQ(e.target.value)}/></div>
+            <button onClick={() => alert("Select a row link icon below to map manually")} className="bg-indigo-600 text-white px-5 py-2 rounded-xl text-sm font-black shadow-lg uppercase tracking-widest text-[10px]"><Link size={14} className="inline mr-2"/> Manual Link</button>
           </div>
         </div>
         <div className="bg-white border-0 shadow-xl rounded-2xl flex-1 overflow-hidden flex flex-col">
           <div className="overflow-auto flex-1">
             <table className="w-full text-xs text-left border-collapse">
-              <thead className="bg-slate-900 text-white sticky top-0 z-10 border-b border-slate-700">
+              <thead className="bg-slate-900 text-white sticky top-0 z-10 border-b border-slate-700 uppercase tracking-widest text-[9px] font-black">
                 <tr>
                   <th className="p-4 border-r border-slate-800 bg-slate-950 w-32 cursor-pointer" onClick={() => setSort({key: "status", dir: sort.dir === "asc" ? "desc" : "asc", type: "string"})}>STATUS <ArrowUpDown size={10} className="inline ml-1"/></th>
-                  <th colSpan="3" className="p-3 text-center border-r border-slate-800 bg-slate-800 text-[10px] font-black uppercase text-slate-400 tracking-widest">Internal System</th>
-                  <th colSpan="2" className="p-3 text-center border-r border-slate-800 bg-blue-900 text-[10px] font-black uppercase text-blue-200 tracking-widest">Bank Statement</th>
-                  <th colSpan="2" className="p-3 text-center bg-purple-900 text-[10px] font-black uppercase text-purple-200 tracking-widest">Tally ERP</th>
-                  <th className="p-3 bg-slate-950 text-center">ACTION</th>
+                  <th colSpan="3" className="p-3 text-center border-r border-slate-800 bg-slate-800">Zone 1: System Records</th>
+                  <th colSpan="2" className="p-3 text-center border-r border-slate-800 bg-blue-900 text-blue-200">Zone 2: Bank (ICICI)</th>
+                  <th colSpan="2" className="p-3 text-center bg-purple-900 text-purple-200">Zone 3: Tally ERP</th>
+                  <th className="p-3 bg-slate-950 text-center">LINK</th>
                 </tr>
-                <tr className="bg-slate-800 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-700">
-                  <th className="p-3 border-r border-slate-700 cursor-pointer bg-slate-900" onClick={() => setSort({key: "date", dir: sort.dir === "asc" ? "desc" : "asc", type: "date"})}>BEST DATE <ArrowUpDown size={10} className="inline ml-1"/></th>
-                  <th className="p-3 border-r border-slate-700">Customer</th><th className="p-3 border-r border-slate-700 text-right">Sys Amt</th><th className="p-3 border-r border-slate-700">Chq No</th>
-                  <th className="p-3 border-r border-slate-700 bg-blue-950">Description</th><th className="p-3 border-r border-slate-700 text-right bg-blue-950">Bank Amt</th>
-                  <th className="p-3 border-r border-slate-700 bg-purple-950">Party</th><th className="p-3 text-right bg-purple-950">Tally Amt</th>
+                <tr className="bg-slate-800 border-b border-slate-700">
+                  <th className="p-3 border-r border-slate-700 cursor-pointer bg-slate-900" onClick={() => setSort({key: "date", dir: sort.dir === "asc" ? "desc" : "asc", type: "date"})}>DATE <ArrowUpDown size={10} className="inline ml-1"/></th>
+                  <th className="p-3 border-r border-slate-700">Customer</th><th className="p-3 border-r border-slate-700 text-right">Amount</th>
+                  <th className="p-3 border-r border-slate-700 bg-blue-950">Description</th><th className="p-3 border-r border-slate-700 text-right bg-blue-950">Amount</th>
+                  <th className="p-3 border-r border-slate-700 bg-purple-950">Party Name</th><th className="p-3 text-right bg-purple-950">Amount</th>
                   <th className="p-3 bg-slate-900"></th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map(r => (
                   <tr key={r.id} className={`${r.color} border-b border-slate-50 hover:brightness-95 transition-all`}>
-                    <td className="p-4 border-r border-slate-100 font-black uppercase text-[10px] tracking-tighter">{r.status}</td>
+                    <td className="p-4 border-r border-slate-100 font-black uppercase text-[10px] tracking-tighter italic">{r.status}</td>
                     <td className="p-3 border-r border-slate-100 font-medium">{toIndianDate(r.date)}</td>
                     <td className="p-3 border-r border-slate-100 font-black text-slate-700">{r.sys?.customer || "-"}</td>
                     <td className="p-3 border-r border-slate-100 font-black text-right">{r.sys ? formatCurrency(r.sys.amount) : "-"}</td>
-                    <td className="p-3 border-r border-slate-100 font-mono text-[10px]">{r.sys?.chqNo || "-"}</td>
-                    <td className="p-3 border-r border-slate-100 text-slate-500 truncate max-w-[200px]">{r.bank ? r.bank.desc : <span className="text-red-400 font-bold italic">MISSING BANK</span>}</td>
+                    <td className="p-3 border-r border-slate-100 text-slate-500 truncate max-w-[200px] font-bold">{r.bank ? r.bank.desc : <span className="text-red-400 font-black italic">MISSING BANK</span>}</td>
                     <td className="p-3 border-r border-slate-100 font-black text-right text-blue-700">{r.bank ? formatCurrency(r.bank.amount) : "-"}</td>
-                    <td className="p-3 border-r border-slate-100 text-slate-500 font-bold">{r.tally ? r.tally.particulars : <span className="text-red-400 font-bold italic">MISSING TALLY</span>}</td>
+                    <td className="p-3 border-r border-slate-100 text-slate-500 font-bold">{r.tally ? r.tally.particulars : <span className="text-red-400 font-black italic">MISSING TALLY</span>}</td>
                     <td className="p-3 border-r border-slate-100 font-black text-right text-purple-700">{r.tally ? formatCurrency(r.tally.amount) : "-"}</td>
                     <td className="p-3 text-center">
                       {r.manual ? <button onClick={() => save("mappings", manualMappings.filter(m => m.id !== r.id))} className="text-red-500 hover:scale-125 transition-transform"><Trash2 size={16}/></button> : <button className="text-indigo-600 hover:scale-125 transition-transform"><Link size={16}/></button>}
@@ -248,29 +245,28 @@ export default function App() {
   };
 
   // ==========================================
-  // MODULE: REGISTER (BATCH ENTRY + ENTRY DATE)
+  // MODULE: REGISTER (BATCH + REASON EDIT)
   // ==========================================
   const ChequeRegister = () => {
     const [q, setQ] = useState(""), [m, setM] = useState("All"), [y, setY] = useState("All");
     const [sort, setSort] = useState({ key: "enteredAt", dir: "desc", type: "date" });
     const [isBulkOpen, setIsBulkOpen] = useState(false);
     const [bulkRows, setBulkRows] = useState([{ id: 1, eDate: new Date().toISOString().split("T")[0], cDate: "", cust: "", no: "", amt: "", status: "Pending", rem: "" }]);
-    const [sel, setSel] = useState(new Set()), [edit, setEdit] = useState(null);
+    const [sel, setSel] = useState(new Set()), [edit, setEdit] = useState(null), [editReason, setEditReason] = useState("");
 
     const yrs = [...new Set(cheques.map(c => c.enteredAt?.split("-")[0]))].filter(Boolean).sort();
     let filtered = cheques.filter(c => !c.deleted);
     if (m !== "All") filtered = filtered.filter(c => c.enteredAt?.split("-")[1] === m);
     if (y !== "All") filtered = filtered.filter(c => c.enteredAt?.startsWith(y));
-    if (q) {
-      const term = q.toLowerCase();
-      filtered = filtered.filter(c => c.customer.toLowerCase().includes(term) || String(c.chqNo).includes(term));
-    }
+    if (q) filtered = filtered.filter(c => c.customer.toLowerCase().includes(q.toLowerCase()) || String(c.chqNo).includes(q));
     const rows = applySort(filtered, sort);
 
     const saveBulk = () => {
       const valid = bulkRows.filter(r => r.cust && r.no && r.amt);
       const items = valid.map(v => ({ id: Date.now() + Math.random(), enteredAt: v.eDate, chqDate: v.cDate || v.eDate, customer: v.cust.trim(), chqNo: v.no, amount: Number(v.amt), status: v.status, remarks: v.rem || "", deleted: false }));
-      save("cheques", [...items, ...cheques]); setIsBulkOpen(false);
+      save("cheques", [...items, ...cheques]); 
+      logAction("Bulk Entry", "Register", `Added batch of ${items.length} records`);
+      setIsBulkOpen(false);
     };
 
     return (
@@ -279,14 +275,14 @@ export default function App() {
           <div className="flex items-center space-x-4">
             <h2 className="text-2xl font-black text-slate-800 tracking-tighter italic">Cheque Register</h2>
             {sel.size > 0 && currentUser.role === "Admin" && (
-              <button onClick={() => { if(confirm(`Delete ${sel.size} items?`)){ save("cheques", cheques.map(c => sel.has(c.id)?{...c, deleted:true}:c)); setSel(new Set()); }}} className="bg-red-600 text-white px-4 py-1.5 rounded-xl text-xs font-black shadow-lg"><Trash2 size={14} className="mr-2 inline"/> Delete {sel.size}</button>
+              <button onClick={() => { if(confirm(`Delete ${sel.size} items?`)){ save("cheques", cheques.map(c => sel.has(c.id)?{...c, deleted:true}:c)); setSel(new Set()); logAction("Admin Delete", "Register", `Wiped ${sel.size} records`); }}} className="bg-red-600 text-white px-4 py-1.5 rounded-xl text-xs font-black shadow-lg uppercase tracking-widest"><Trash2 size={14} className="mr-2 inline"/> Delete Selected</button>
             )}
           </div>
           <div className="flex space-x-2">
             <select className="border shadow-sm p-2 rounded-xl text-xs font-bold bg-white" value={m} onChange={e => setM(e.target.value)}><option value="All">Months</option>{["01","02","03","04","05","06","07","08","09","10","11","12"].map(mo => <option key={mo}>{mo}</option>)}</select>
             <select className="border shadow-sm p-2 rounded-xl text-xs font-bold bg-white" value={y} onChange={e => setY(e.target.value)}><option value="All">Years</option>{yrs.map(yr => <option key={yr}>{yr}</option>)}</select>
-            <input placeholder="Search..." className="border shadow-sm p-2 rounded-xl text-sm w-40" onChange={e => setQ(e.target.value)}/>
-            <button onClick={() => setIsBulkOpen(true)} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-black shadow-lg flex items-center hover:bg-blue-700 tracking-widest"><Plus size={18} className="mr-2"/> BULK ENTRY</button>
+            <input placeholder="Search party..." className="border shadow-sm p-2 rounded-xl text-sm w-40 outline-none" onChange={e => setQ(e.target.value)}/>
+            <button onClick={() => setIsBulkOpen(true)} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-black shadow-lg flex items-center hover:bg-blue-700 tracking-widest uppercase"><Plus size={18} className="mr-2"/> BATCH ENTRY</button>
           </div>
         </div>
         <div className="bg-white border-0 shadow-xl rounded-2xl overflow-hidden">
@@ -300,7 +296,7 @@ export default function App() {
                 <th className="p-4 cursor-pointer" onClick={() => setSort({key: "chqNo", dir: sort.dir === "asc" ? "desc" : "asc", type: "string"})}>Chq No <ArrowUpDown size={10} className="inline ml-1"/></th>
                 <th className="p-4 text-right cursor-pointer" onClick={() => setSort({key: "amount", dir: sort.dir === "asc" ? "desc" : "asc", type: "number"})}>Amount <ArrowUpDown size={10} className="inline ml-1"/></th>
                 <th className="p-4 text-center">Status</th>
-                <th className="p-4 text-center w-10"></th>
+                <th className="p-4 text-center">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -316,16 +312,16 @@ export default function App() {
                     {manualMappings.some(m => m.sysId === c.id) ? <span className="bg-indigo-600 text-white text-[9px] px-2 py-0.5 rounded-full font-black tracking-widest shadow-sm">MAPPED</span> :
                     <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest ${c.status === "Cleared" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>{c.status}</span>}
                   </td>
-                  <td className="p-4 text-center"><button onClick={() => setEdit(c)} className="text-blue-500 hover:scale-125 transition-transform"><Edit size={16}/></button></td>
+                  <td className="p-4 text-center"><button onClick={() => { setEdit(c); setEditReason(""); }} className="text-blue-500 hover:scale-125 transition-transform"><Edit size={16}/></button></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
         {isBulkOpen && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
-            <div className="bg-white p-6 rounded-3xl shadow-2xl w-full max-w-6xl h-[80vh] flex flex-col border-[8px] border-white shadow-indigo-900/20">
-              <h3 className="font-black text-2xl mb-6 tracking-tighter italic">Rapid Batch Entry</h3>
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-50 p-4 font-sans">
+            <div className="bg-white p-6 rounded-3xl shadow-2xl w-full max-w-6xl h-[80vh] flex flex-col border-[8px] border-white">
+              <h3 className="font-black text-2xl mb-6 tracking-tighter italic uppercase text-slate-800">Rapid Multi-Entry Grid</h3>
               <div className="flex-1 overflow-auto bg-slate-50 rounded-2xl p-4">
                 <table className="w-full text-xs text-left">
                   <thead className="sticky top-0 bg-slate-800 text-slate-400 uppercase text-[9px] font-black z-20">
@@ -333,43 +329,55 @@ export default function App() {
                   </thead>
                   <tbody>
                     {bulkRows.map((r, idx) => (
-                      <tr key={r.id} className="border-b bg-white hover:bg-blue-50">
+                      <tr key={r.id} className="border-b bg-white hover:bg-blue-50 transition-all">
                         <td className="p-1"><input type="date" value={r.eDate} className="w-full p-2 border-0 bg-transparent text-sm font-bold" onChange={e => { const n = [...bulkRows]; n[idx].eDate = e.target.value; setBulkRows(n); }}/></td>
                         <td className="p-1"><input type="date" value={r.cDate} className="w-full p-2 border-0 bg-transparent text-sm font-bold" onChange={e => { const n = [...bulkRows]; n[idx].cDate = e.target.value; setBulkRows(n); }}/></td>
-                        <td className="p-1"><input list="clist" value={r.cust} placeholder="Customer" className="w-full p-2 border-0 bg-transparent text-sm font-black" onChange={e => { const n = [...bulkRows]; n[idx].cust = e.target.value; setBulkRows(n); }}/></td>
-                        <td className="p-1"><input value={r.no} placeholder="Chq No" className="w-full p-2 border-0 bg-transparent text-sm font-mono font-black text-blue-600" onChange={e => { const n = [...bulkRows]; n[idx].no = e.target.value; setBulkRows(n); }}/></td>
-                        <td className="p-1"><input type="number" value={r.amt} placeholder="Amount" className="w-full p-2 border-0 bg-transparent text-sm font-black text-right" onChange={e => { const n = [...bulkRows]; n[idx].amt = e.target.value; setBulkRows(n); }}/></td>
-                        <td className="p-1"><select value={r.status} className="w-full p-2 border-0 bg-transparent text-sm font-bold" onChange={e => { const n = [...bulkRows]; n[idx].status = e.target.value; setBulkRows(n); }}><option>Pending</option><option>Cleared</option></select></td>
-                        <td className="p-1"><input value={r.rem} placeholder="Notes" className="w-full p-2 border-0 bg-transparent text-sm" onChange={e => { const n = [...bulkRows]; n[idx].rem = e.target.value; setBulkRows(n); }}/></td>
-                        <td className="p-1 text-center"><button onClick={() => setBulkRows(bulkRows.filter(x => x.id !== r.id))} className="text-red-300 hover:text-red-600"><Trash2 size={16}/></button></td>
+                        <td className="p-1"><input list="clist" value={r.cust} placeholder="Start typing..." className="w-full p-2 border-0 bg-transparent text-sm font-black" onChange={e => { const n = [...bulkRows]; n[idx].cust = e.target.value; setBulkRows(n); }}/></td>
+                        <td className="p-1"><input value={r.no} placeholder="000000" className="w-full p-2 border-0 bg-transparent text-sm font-mono font-black text-blue-600" onChange={e => { const n = [...bulkRows]; n[idx].no = e.target.value; setBulkRows(n); }}/></td>
+                        <td className="p-1"><input type="number" value={r.amt} placeholder="0" className="w-full p-2 border-0 bg-transparent text-sm font-black text-right" onChange={e => { const n = [...bulkRows]; n[idx].amt = e.target.value; setBulkRows(n); }}/></td>
+                        <td className="p-1"><select value={r.status} className="w-full p-2 border-0 bg-transparent text-sm font-bold outline-none" onChange={e => { const n = [...bulkRows]; n[idx].status = e.target.value; setBulkRows(n); }}><option>Pending</option><option>Cleared</option></select></td>
+                        <td className="p-1"><input value={r.rem} placeholder="..." className="w-full p-2 border-0 bg-transparent text-sm font-medium text-slate-400 italic" onChange={e => { const n = [...bulkRows]; n[idx].rem = e.target.value; setBulkRows(n); }}/></td>
+                        <td className="p-1 text-center"><button onClick={() => setBulkRows(bulkRows.filter(x => x.id !== r.id))} className="text-red-300 hover:text-red-600 transition-all"><Trash2 size={16}/></button></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                <button onClick={() => setBulkRows([...bulkRows, { id: Date.now(), eDate: new Date().toISOString().split("T")[0], cDate: "", cust: "", no: "", amt: "", status: "Pending", rem: "" }])} className="mt-6 text-indigo-600 font-black text-xs px-4 py-2 border-2 border-dashed border-indigo-200 rounded-xl hover:bg-white transition-all">+ Add Row</button>
+                <button onClick={() => setBulkRows([...bulkRows, { id: Date.now(), eDate: new Date().toISOString().split("T")[0], cDate: "", cust: "", no: "", amt: "", status: "Pending", rem: "" }])} className="mt-6 text-indigo-600 font-black text-xs px-6 py-3 border-2 border-dashed border-indigo-200 rounded-xl hover:bg-white transition-all">+ ADD NEW ROW</button>
               </div>
-              <div className="flex justify-end space-x-3 pt-6"><button onClick={() => setIsBulkOpen(false)} className="px-8 py-3 rounded-2xl text-slate-400 font-black">Cancel</button><button onClick={saveBulk} className="bg-indigo-600 text-white px-12 py-3 rounded-2xl font-black shadow-xl shadow-indigo-200">SAVE BATCH</button></div>
+              <div className="flex justify-end space-x-3 pt-6"><button onClick={() => setIsBulkOpen(false)} className="px-8 py-3 rounded-2xl text-slate-400 font-black uppercase tracking-widest text-[10px]">Cancel</button><button onClick={saveBulk} className="bg-indigo-600 text-white px-12 py-3 rounded-2xl font-black shadow-xl shadow-indigo-200 uppercase tracking-widest text-xs">Commit Batch</button></div>
             </div>
           </div>
         )}
         {edit && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
             <form onSubmit={e => {
               e.preventDefault();
+              if(!editReason.trim()) return alert("Mandatory: Provide a reason for this modification.");
               const val = { id: edit.id, enteredAt: e.target.e.value, chqDate: e.target.c.value, customer: e.target.p.value.trim(), chqNo: e.target.n.value, amount: Number(e.target.a.value), status: e.target.s.value, remarks: e.target.rem.value, deleted: false };
-              save("cheques", cheques.map(i => i.id === edit.id ? val : i)); setEdit(null);
-            }} className="bg-white p-8 rounded-[2rem] shadow-2xl w-full max-w-sm border-t-8 border-indigo-600 space-y-4">
-              <h3 className="font-black text-xl mb-4 text-slate-800">Edit Record</h3>
+              save("cheques", cheques.map(i => i.id === edit.id ? val : i));
+              logAction("Security Override", "Register", `MODIFIED: ${val.customer} | REASON: ${editReason}`);
+              setEdit(null);
+            }} className="bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm border-t-8 border-indigo-600 space-y-4">
+              <h3 className="font-black text-xl mb-4 text-slate-800 uppercase tracking-tighter">Security Protocol: Edit Record</h3>
               <div className="grid grid-cols-2 gap-4">
                 <input name="e" type="date" defaultValue={edit.enteredAt} className="w-full bg-slate-50 p-3 rounded-xl text-sm font-bold ring-1 ring-slate-100 outline-none shadow-inner"/>
                 <input name="c" type="date" defaultValue={edit.chqDate} className="w-full bg-slate-50 p-3 rounded-xl text-sm font-bold ring-1 ring-slate-100 outline-none shadow-inner"/>
               </div>
-              <input name="p" defaultValue={edit.customer} required className="w-full bg-slate-50 p-3 rounded-xl text-sm font-bold ring-1 ring-slate-100 outline-none shadow-inner"/>
-              <input name="n" defaultValue={edit.chqNo} required className="w-full bg-slate-50 p-3 rounded-xl text-sm font-bold font-mono ring-1 ring-slate-100 outline-none shadow-inner"/>
+              <input name="p" defaultValue={edit.customer} required className="w-full bg-slate-50 p-3 rounded-xl text-sm font-black ring-1 ring-slate-100 outline-none shadow-inner"/>
+              <input name="n" defaultValue={edit.chqNo} required className="w-full bg-slate-50 p-3 rounded-xl text-sm font-black font-mono ring-1 ring-slate-100 outline-none text-indigo-600"/>
               <input name="a" type="number" defaultValue={edit.amount} required className="w-full bg-slate-50 p-3 rounded-xl text-xl font-black ring-1 ring-slate-100 outline-none shadow-inner"/>
-              <select name="s" defaultValue={edit.status} className="w-full bg-slate-50 p-3 rounded-xl text-sm font-black ring-1 ring-slate-100 outline-none shadow-inner"><option>Pending</option><option>Cleared</option><option>Bounced</option></select>
-              <textarea name="rem" placeholder="Add remarks..." defaultValue={edit.remarks} className="w-full bg-slate-50 p-3 rounded-xl text-sm h-20 ring-1 ring-slate-100 outline-none shadow-inner italic"/>
-              <div className="flex justify-end space-x-3 pt-2"><button type="button" onClick={() => setEdit(null)} className="px-6 py-2.5 rounded-xl text-sm font-bold text-slate-400">Cancel</button><button className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl text-sm font-black shadow-lg">Update Record</button></div>
+              <select name="s" defaultValue={edit.status} className="w-full bg-slate-50 p-3 rounded-xl text-sm font-black ring-1 ring-slate-100 outline-none shadow-inner tracking-widest"><option>Pending</option><option>Cleared</option><option>Bounced</option></select>
+              <textarea name="rem" placeholder="User Remarks..." defaultValue={edit.remarks} className="w-full bg-slate-50 p-3 rounded-xl text-sm h-16 ring-1 ring-slate-100 outline-none italic font-medium text-slate-500 shadow-inner"/>
+              
+              <div className="bg-yellow-50 p-4 rounded-2xl border-2 border-yellow-200 mt-4">
+                <label className="text-[9px] font-black text-yellow-700 uppercase flex items-center mb-1 tracking-widest"><AlertTriangle size={10} className="mr-1"/> Audit Requirement: Reason for edit</label>
+                <input value={editReason} onChange={e=>setEditReason(e.target.value)} required placeholder="Explain why this data is changing..." className="w-full bg-white p-3 rounded-xl text-xs font-black border-0 outline-none ring-1 ring-yellow-400"/>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-2">
+                <button type="button" onClick={() => setEdit(null)} className="px-6 py-2.5 rounded-xl text-xs font-bold text-slate-400">Abort</button>
+                <button disabled={!editReason.trim()} className={`px-6 py-2.5 rounded-xl text-xs font-black shadow-lg transition-all ${!editReason.trim() ? 'bg-slate-200 text-slate-300 cursor-not-allowed' : 'bg-slate-900 text-white hover:bg-black'}`}>COMMIT EDIT</button>
+              </div>
             </form>
           </div>
         )}
@@ -378,24 +386,23 @@ export default function App() {
   };
 
   // ==========================================
-  // MODULE: SETTINGS (APP CONFIG)
+  // MODULE: SYSTEM & ACCESS MODULES
   // ==========================================
   const SettingsModule = () => {
     const [cName, setCName] = useState(config.companyName);
     const [cVar, setCVar] = useState(config.variance);
     return (
       <div className="p-10 max-w-2xl mx-auto">
-        <h2 className="text-3xl font-black mb-8 italic tracking-tighter">System Configuration</h2>
+        <h2 className="text-3xl font-black mb-8 italic tracking-tighter uppercase">System Config</h2>
         <div className="bg-white p-10 rounded-[3rem] shadow-2xl border-t-[12px] border-slate-900 space-y-8">
-           <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2 tracking-widest">Company Display Name</label><input value={cName} onChange={e=>setCName(e.target.value)} className="w-full bg-slate-50 p-5 rounded-2xl text-lg font-black ring-1 ring-slate-100 outline-none shadow-inner uppercase"/></div>
-           <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2 tracking-widest">Match Date Variance (Days)</label><input type="number" value={cVar} onChange={e=>setCVar(Number(e.target.value))} className="w-full bg-slate-50 p-5 rounded-2xl text-lg font-black ring-1 ring-slate-100 outline-none shadow-inner"/></div>
-           <button onClick={()=>{ saveConfig({companyName: cName, variance: cVar}); alert("Settings Committed to Cloud"); log("Security", "Config", "Updated App Settings"); }} className="w-full bg-slate-900 text-white p-6 rounded-[2rem] font-black tracking-widest hover:bg-black transition-all shadow-xl">COMMIT CONFIGURATION</button>
+           <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2 tracking-widest">Global Display Identity</label><input value={cName} onChange={e=>setCName(e.target.value)} className="w-full bg-slate-50 p-5 rounded-2xl text-lg font-black ring-1 ring-slate-100 outline-none shadow-inner uppercase"/></div>
+           <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2 tracking-widest">Auto-Match Window (Variance Days)</label><input type="number" value={cVar} onChange={e=>setCVar(Number(e.target.value))} className="w-full bg-slate-50 p-5 rounded-2xl text-lg font-black ring-1 ring-slate-100 outline-none shadow-inner"/></div>
+           <button onClick={()=>{ saveConfig({companyName: cName, variance: cVar}); alert("Synchronized!"); logAction("Protocol Update", "Config", `Updated settings. Variance: ${cVar}`); }} className="w-full bg-slate-900 text-white p-6 rounded-[2rem] font-black tracking-[0.3em] hover:bg-black transition-all shadow-xl italic uppercase">Commit Protocols</button>
         </div>
       </div>
     );
   };
 
-  // --- UPLOAD ---
   const UploadModule = () => {
     const up = (e, t) => {
       const f = e.target.files[0]; if (!f) return;
@@ -415,64 +422,78 @@ export default function App() {
             else { nl.push({ id: vn, date: formatExcelDate(row["Date"]), particulars: String(row["Particulars"] || ""), vchNo: vn, amount: Number(row["Debit"] || row["Credit"] || row["Amount"] || 0) }); add++; }
           }); save("tally", nl);
         }
-        alert(`Process Complete!\nAdded: ${add}\nSkipped: ${dp}`);
+        alert(`Finished: ${add} New, ${dp} Skipped`); logAction("Data Sync", t==="B"?"Bank":"Tally", `Wrote ${add} records`);
       }; r.readAsBinaryString(f);
     };
     return (
-      <div className="p-20 grid grid-cols-2 gap-16 max-w-7xl mx-auto">
+      <div className="p-20 grid grid-cols-2 gap-16 max-w-7xl mx-auto font-sans">
         <div className="bg-white p-16 rounded-[3.5rem] shadow-2xl border-t-[20px] border-orange-500 relative text-center">
-          <button onClick={() => save("bank", [])} className="absolute top-6 right-6 text-red-500 hover:scale-150 transition-all"><Trash size={24}/></button>
-          <UploadCloud size={100} className="text-orange-500 mb-8 mx-auto"/><h3 className="text-3xl font-black italic tracking-tighter">Bank ICICI</h3>
+          <button onClick={() => save("bank", [])} className="absolute top-6 right-6 text-red-400 hover:scale-150 transition-all"><Trash size={24}/></button>
+          <UploadCloud size={100} className="text-orange-500 mb-8 mx-auto"/><h3 className="text-3xl font-black italic tracking-tighter uppercase">Bank ICICI</h3>
           <input type="file" onChange={e => up(e, "B")} className="text-xs border-4 border-dashed border-slate-100 p-10 rounded-[2.5rem] w-full bg-slate-50 cursor-pointer font-black mt-4"/>
         </div>
         <div className="bg-white p-16 rounded-[3.5rem] shadow-2xl border-t-[20px] border-purple-500 relative text-center">
-          <button onClick={() => save("tally", [])} className="absolute top-6 right-6 text-red-500 hover:scale-150 transition-all"><Trash size={24}/></button>
-          <FileSpreadsheet size={100} className="text-purple-500 mb-8 mx-auto"/><h3 className="text-3xl font-black italic tracking-tighter">Tally Vouchers</h3>
+          <button onClick={() => save("tally", [])} className="absolute top-6 right-6 text-red-400 hover:scale-150 transition-all"><Trash size={24}/></button>
+          <FileSpreadsheet size={100} className="text-purple-500 mb-8 mx-auto"/><h3 className="text-3xl font-black italic tracking-tighter uppercase">Tally Ledger</h3>
           <input type="file" onChange={e => up(e, "T")} className="text-xs border-4 border-dashed border-slate-100 p-10 rounded-[2.5rem] w-full bg-slate-50 cursor-pointer font-black mt-4"/>
         </div>
       </div>
     );
   };
 
-  const MasterCustomers = () => (
-    <div className="p-10 max-w-xl mx-auto">
-      <div className="flex justify-between mb-8"><h2 className="text-3xl font-black italic tracking-tighter">Customer Master</h2><label className="bg-indigo-600 text-white px-6 py-3 rounded-2xl cursor-pointer text-xs font-black shadow-xl hover:bg-indigo-700 tracking-widest"><FileUp size={16} className="inline mr-2"/> IMPORT EXCEL<input type="file" className="hidden" onChange={e=>{
-        const f = e.target.files[0]; if(!f) return; const r = new FileReader(); r.onload=(ev)=>{
-          const wb = XLSX.read(ev.target.result, {type:'binary'}); const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-          const nl = [...customers]; raw.forEach(row=>{ const name = row.Name || row.Customer; if(name && !nl.some(c=>c.name.toLowerCase()===String(name).toLowerCase().trim())) nl.push({id:Date.now()+Math.random(), name:String(name).trim()})});
-          save("customers", nl); alert("Master Updated");
-        }; r.readAsBinaryString(f);
-      }}/></label></div>
-      <div className="bg-white border-0 shadow-2xl rounded-[2.5rem] overflow-auto max-h-[70vh]">
-        {customers.map(c => <div key={c.id} className="p-6 border-b border-slate-50 flex justify-between hover:bg-slate-50 transition-all font-black text-slate-700 italic"><span>{c.name}</span><button onClick={() => save("customers", customers.filter(i => i.id !== c.id))} className="text-red-300 hover:text-red-500"><Trash2 size={20}/></button></div>)}
+  const AuditTrailModule = () => (
+    <div className="p-8 w-full h-full flex flex-col font-sans">
+      <h2 className="text-3xl font-black text-slate-800 mb-8 italic tracking-tighter uppercase">System Audit Protocols</h2>
+      <div className="bg-white border-0 shadow-2xl rounded-[3rem] overflow-hidden flex-1 border-8 border-white">
+        <div className="overflow-auto h-full">
+          <table className="w-full text-[11px] text-left">
+            <thead className="bg-slate-900 text-slate-500 sticky top-0 uppercase tracking-widest text-[8px] font-black z-10"><tr><th className="p-5">Security Timestamp</th><th className="p-5">Operator ID</th><th className="p-5">Event Protocol</th><th className="p-5">Audit Details / Reason</th></tr></thead>
+            <tbody>{auditTrail.map(l => (<tr key={l.id} className="border-b border-slate-50 hover:bg-slate-50 transition-all italic font-medium"><td className="p-5 text-slate-400 font-mono font-bold tracking-tighter text-[10px]">{l.time}</td><td className="p-5 font-black text-slate-800 uppercase tracking-tighter text-[10px]">{l.user}</td><td className="p-5 text-indigo-600 font-black italic tracking-widest uppercase text-[10px]">{l.action}</td><td className="p-5 font-bold text-slate-500 tracking-tight">{l.record}: {l.details}</td></tr>))}</tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
 
-  const UserManagement = () => {
+  const MasterCustomers = () => (
+    <div className="p-10 max-w-xl mx-auto">
+      <div className="flex justify-between mb-8"><h2 className="text-3xl font-black italic tracking-tighter uppercase">Client Index</h2><label className="bg-indigo-600 text-white px-6 py-3 rounded-2xl cursor-pointer text-[10px] font-black shadow-xl hover:bg-indigo-700 tracking-widest uppercase"><FileUp size={16} className="inline mr-2"/> Import Master<input type="file" className="hidden" onChange={e=>{
+        const f = e.target.files[0]; if(!f) return; const r = new FileReader(); r.onload=(ev)=>{
+          const wb = XLSX.read(ev.target.result, {type:'binary'}); const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+          const nl = [...customers]; raw.forEach(row=>{ const name = row.Name || row.Customer; if(name && !nl.some(c=>c.name.toLowerCase()===String(name).toLowerCase().trim())) nl.push({id:Date.now()+Math.random(), name:String(name).trim()})});
+          save("customers", nl); alert("Master Updated"); logAction("Protocol Sync", "Master", "Client Import Batch");
+        }; r.readAsBinaryString(f);
+      }}/></label></div>
+      <div className="bg-white border-0 shadow-2xl rounded-[2.5rem] overflow-auto max-h-[70vh]">
+        {customers.map(c => <div key={c.id} className="p-6 border-b border-slate-50 flex justify-between hover:bg-slate-50 transition-all font-black text-slate-700 italic tracking-tighter text-lg uppercase"><span>{c.name}</span><button onClick={() => {save("customers", customers.filter(i => i.id !== c.id)); logAction("Protocol Deletion", "Master", `Wiped ${c.name}`);}} className="text-red-300 hover:text-red-500 transition-all"><Trash2 size={20}/></button></div>)}
+      </div>
+    </div>
+  );
+
+  const UserModule = () => {
     const [m, setM] = useState(null);
     return (
-      <div className="p-8">
-        <div className="flex justify-between mb-8"><h2 className="text-3xl font-black tracking-tighter italic">Access Management</h2><button onClick={() => setM({})} className="bg-blue-600 text-white px-8 py-3 rounded-2xl text-[10px] font-black shadow-xl tracking-widest uppercase">NEW USER</button></div>
+      <div className="p-8 font-sans">
+        <div className="flex justify-between mb-8"><h2 className="text-3xl font-black tracking-tighter italic uppercase">Access Protocols</h2><button onClick={() => setM({})} className="bg-blue-600 text-white px-8 py-3 rounded-2xl text-[10px] font-black shadow-xl tracking-widest uppercase">NEW PROTOCOL</button></div>
         <div className="bg-white rounded-[2.5rem] shadow-2xl overflow-hidden">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-slate-50 border-b text-[9px] font-black uppercase text-slate-400 tracking-widest"><tr><th className="p-6">User</th><th className="p-6">Role</th><th className="p-6 text-center">Protocol Edit</th></tr></thead>
-            <tbody>{usersList.map(u => <tr key={u.id} className="border-b border-slate-50 hover:bg-slate-50"><td className="p-6 font-black text-slate-800 text-lg uppercase tracking-tight">{u.name} <span className="text-slate-200 italic ml-2">(@{u.username})</span></td><td className="p-6 font-black text-blue-600 uppercase text-xs tracking-widest">{u.role}</td><td className="p-6 text-center"><button onClick={() => setM(u)} className="text-slate-200 hover:text-blue-600 transition-all hover:scale-150"><Edit size={22}/></button></td></tr>)}</tbody>
+          <table className="w-full text-sm text-left border-collapse">
+            <thead className="bg-slate-50 border-b text-[9px] font-black uppercase text-slate-400 tracking-widest"><tr><th className="p-6">Operator Name</th><th className="p-6">Access Level</th><th className="p-6 text-center">Protocol Edit</th></tr></thead>
+            <tbody>{usersList.map(u => <tr key={u.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors"><td className="p-6 font-black text-slate-800 text-lg uppercase tracking-tight">{u.name} <span className="text-slate-200 italic ml-2">(@{u.username})</span></td><td className="p-6 font-black text-blue-600 uppercase text-xs tracking-widest italic">{u.role}</td><td className="p-6 text-center"><button onClick={() => setM(u)} className="text-slate-200 hover:text-blue-600 transition-all hover:scale-150"><Edit size={22}/></button></td></tr>)}</tbody>
           </table>
         </div>
         {m && (
           <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-md flex items-center justify-center z-50 p-4">
             <form onSubmit={e => {
               e.preventDefault(); const u = { id: m.id || Date.now(), username: e.target.u.value.toLowerCase().trim(), name: e.target.n.value.trim(), role: e.target.r.value, password: e.target.p.value, active: e.target.a.checked };
-              save("users", m.id ? usersList.map(i => i.id === m.id ? u : i) : [...usersList, u]); setM(null);
+              save("users", m.id ? usersList.map(i => i.id === m.id ? u : i) : [...usersList, u]); setM(null); logAction("Security Change", "User", `Admin modified protocols for ${u.username}`);
             }} className="bg-white p-10 rounded-[3rem] shadow-2xl w-full max-w-sm space-y-4 border-t-[12px] border-slate-900">
-              <h3 className="font-black text-2xl text-slate-800 tracking-tighter italic mb-4">Security Protocol</h3>
-              <input name="u" placeholder="Admin ID" defaultValue={m.username} required className="w-full bg-slate-50 p-4 rounded-2xl text-xs font-black outline-none tracking-widest ring-1 ring-slate-100 shadow-inner"/>
+              <h3 className="font-black text-2xl text-slate-800 tracking-tighter italic mb-4">Security Key Config</h3>
+              <input name="u" placeholder="Admin Login ID" defaultValue={m.username} required className="w-full bg-slate-50 p-4 rounded-2xl text-xs font-black outline-none tracking-widest ring-1 ring-slate-100 shadow-inner"/>
               <input name="n" placeholder="Name" defaultValue={m.name} required className="w-full bg-slate-50 p-4 rounded-2xl text-xs font-black outline-none tracking-widest ring-1 ring-slate-100 shadow-inner"/>
               <input name="p" placeholder="Password" defaultValue={m.password} required className="w-full bg-slate-50 p-4 rounded-2xl text-xs font-black outline-none tracking-widest ring-1 ring-slate-100 shadow-inner"/>
               <select name="r" defaultValue={m.role || "Team"} className="w-full bg-slate-50 p-4 rounded-2xl text-xs font-black ring-1 ring-slate-100 uppercase tracking-widest"><option>Team</option><option>Admin</option></select>
-              <label className="flex items-center text-xs font-black text-slate-400 uppercase tracking-widest ml-1"><input name="a" type="checkbox" defaultChecked={m.active ?? true} className="mr-4 w-6 h-6 border-2 rounded-lg"/> Authorized</label>
-              <div className="flex justify-end space-x-3 pt-4"><button type="button" onClick={() => setM(null)} className="px-6 py-2.5 rounded-2xl font-black text-slate-300">Abort</button><button className="bg-slate-900 text-white px-10 py-3 rounded-2xl font-black text-xs shadow-lg uppercase tracking-widest">COMMIT</button></div>
+              <label className="flex items-center text-xs font-black text-slate-400 uppercase tracking-widest ml-1"><input name="a" type="checkbox" defaultChecked={m.active ?? true} className="mr-4 w-6 h-6 border-2 rounded-lg shadow-sm"/> Active Clearance</label>
+              <div className="flex justify-end space-x-3 pt-4"><button type="button" onClick={() => setM(null)} className="px-6 py-2.5 rounded-2xl font-black text-slate-300 uppercase tracking-widest text-[9px]">Abort</button><button className="bg-slate-900 text-white px-10 py-3 rounded-2xl font-black shadow-lg uppercase tracking-widest text-xs">COMMIT</button></div>
             </form>
           </div>
         )}
@@ -480,25 +501,12 @@ export default function App() {
     );
   };
 
-  const AuditTrailModule = () => (
-    <div className="p-8 w-full h-full flex flex-col">
-      <h2 className="text-3xl font-black text-slate-800 mb-8 italic tracking-tighter uppercase">Security Logs</h2>
-      <div className="bg-white border-0 shadow-2xl rounded-[3rem] overflow-hidden flex-1 border-8 border-white">
-        <div className="overflow-auto h-full">
-          <table className="w-full text-[11px] text-left">
-            <thead className="bg-slate-900 text-slate-400 sticky top-0 uppercase tracking-widest text-[8px] font-black z-10"><tr><th className="p-5">Timestamp (DD/MM/YY)</th><th className="p-5">Operator</th><th className="p-5">Action Type</th><th className="p-5">Details</th></tr></thead>
-            <tbody>{auditTrail.map(l => (<tr key={l.id} className="border-b border-slate-50 hover:bg-slate-50 transition-all italic"><td className="p-5 text-slate-400 font-mono font-bold tracking-tighter text-[10px]">{l.time}</td><td className="p-5 font-black text-slate-800 uppercase tracking-tighter text-[10px]">{l.user}</td><td className="p-5 text-indigo-600 font-black italic tracking-widest uppercase text-[10px]">{l.action}</td><td className="p-5 font-bold text-slate-500 tracking-tight">{l.record}: {l.details}</td></tr>))}</tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-
+  // --- MAIN NAVIGATION VIEW ---
   return (
-    <div className="h-screen flex bg-slate-100 overflow-hidden font-sans">
+    <div className="h-screen flex bg-slate-100 overflow-hidden font-sans antialiased">
       <div className="w-72 bg-slate-900 text-white flex flex-col shrink-0 shadow-2xl z-20">
-        <div className="p-12 border-b border-slate-800 text-center font-black text-blue-400 tracking-tighter text-3xl uppercase italic flex flex-col drop-shadow-lg">{config.companyName.split(' ')[0]}<span className="text-[9px] tracking-[0.6em] text-slate-500 mt-2 font-black">Control Systems</span></div>
-        <nav className="flex-1 py-10 overflow-y-auto">
+        <div className="p-12 border-b border-slate-800 text-center font-black text-blue-400 tracking-tighter text-3xl uppercase italic flex flex-col drop-shadow-lg">{config.companyName.split(' ')[0]}<span className="text-[9px] tracking-[0.6em] text-slate-500 mt-2 font-black uppercase">Enterprise ERP</span></div>
+        <nav className="flex-1 py-8 overflow-y-auto">
           {[
             { id: "Dashboard", icon: <LayoutDashboard size={22}/> },
             { id: "Cheque Register", icon: <List size={22}/> },
@@ -509,27 +517,27 @@ export default function App() {
             { id: "Audit Trail", icon: <FileText size={22}/> },
             { id: "Settings", icon: <Settings size={22}/> },
           ].map(m => (
-            <button key={m.id} onClick={() => setCurrentScreen(m.id)} className={`w-full text-left px-12 py-6 flex items-center text-[10px] font-black tracking-[0.3em] uppercase transition-all relative ${currentScreen === m.id ? "bg-indigo-600 text-white shadow-2xl scale-105 z-10" : "text-slate-500 hover:text-white hover:bg-slate-800"}`}>
+            <button key={m.id} onClick={() => setCurrentScreen(m.id)} className={`w-full text-left px-12 py-5 flex items-center text-[10px] font-black tracking-[0.3em] uppercase transition-all relative ${currentScreen === m.id ? "bg-indigo-600 text-white shadow-2xl scale-105 z-10" : "text-slate-500 hover:text-white hover:bg-slate-800"}`}>
                 {currentScreen === m.id && <div className="absolute left-0 top-0 bottom-0 w-2 bg-white"/>}
                 {m.icon} <span className="ml-6">{m.id}</span>
             </button>
           ))}
         </nav>
         <div className="p-8 bg-black/40 flex justify-between items-center text-xs border-t border-slate-800 shadow-2xl">
-          <div className="tracking-tighter"><p className="font-black text-white italic text-lg">{currentUser.name}</p><p className="text-[9px] text-indigo-400 uppercase font-black tracking-[0.3em] mt-1">{currentUser.role} Level</p></div>
+          <div className="tracking-tighter"><p className="font-black text-white italic text-lg uppercase">{currentUser.name}</p><p className="text-[9px] text-indigo-400 uppercase font-black tracking-[0.3em] mt-1">{currentUser.role} Control</p></div>
           <button onClick={() => setCurrentUser(null)} className="p-4 bg-slate-800 hover:bg-red-600 rounded-3xl transition-all shadow-xl group"><LogOut size={20} className="group-hover:scale-125 transition-transform"/></button>
         </div>
       </div>
-      <main className="flex-1 overflow-auto bg-[#f8fafc] relative">
+      <main className="flex-1 overflow-auto bg-[#f8fafc] relative w-full">
          {currentScreen === "Dashboard" && <Dashboard />}
          {currentScreen === "Cheque Register" && <ChequeRegister />}
          {currentScreen === "Upload Statements" && <UploadModule />}
          {currentScreen === "Reconciliation" && <Reconciliation />}
          {currentScreen === "Master Customers" && <MasterCustomers />}
-         {currentScreen === "User Management" && <UserManagement />}
+         {currentScreen === "User Management" && <UserModule />}
          {currentScreen === "Audit Trail" && <AuditTrailModule />}
          {currentScreen === "Settings" && <SettingsModule />}
       </main>
     </div>
   );
-} 
+}
