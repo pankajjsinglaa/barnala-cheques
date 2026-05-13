@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import {
   LayoutDashboard, List, FileText, LogOut, Search, Trash2, Edit, Plus, X,
   ArrowUpDown, Users, FileUp, UploadCloud, FileSpreadsheet, CheckCircle,
-  Link, RefreshCw, Shield, UserPlus, Download, Database, Trash, Settings, AlertTriangle
+  Link, RefreshCw, Shield, UserPlus, Download, Database, Trash, Settings, AlertTriangle, Filter
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -22,7 +22,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// --- 2. GLOBAL UTILITIES (DD/MM/YY) ---
+// --- 2. GLOBAL UTILITIES ---
 const toIndianDate = (dateStr) => {
   if (!dateStr) return "";
   if (/^\d{2}\/\d{2}\/\d{2}$/.test(dateStr)) return dateStr;
@@ -75,13 +75,12 @@ const applySort = (data, config) => {
 // ==========================================
 export default function App() {
   const [currentUser, setCurrentUser] = useState(() => {
-    const saved = localStorage.getItem("btc_user_v3");
+    const saved = localStorage.getItem("btc_user_v4");
     return saved ? JSON.parse(saved) : null;
   });
   const [currentScreen, setCurrentScreen] = useState(() => {
-    return localStorage.getItem("btc_screen") || "Dashboard";
+    return localStorage.getItem("btc_nav_v4") || "Dashboard";
   });
-  
   const [isDbReady, setIsDbReady] = useState(false);
   const [config, setConfig] = useState({ companyName: "Barnala Trading Co", variance: 5 });
 
@@ -94,26 +93,13 @@ export default function App() {
   const [manualMappings, setManualMappings] = useState([]);
 
   useEffect(() => {
-    if (currentUser) localStorage.setItem("btc_user_v3", JSON.stringify(currentUser));
-    else localStorage.removeItem("btc_user_v3");
+    if (currentUser) localStorage.setItem("btc_user_v4", JSON.stringify(currentUser));
+    else localStorage.removeItem("btc_user_v4");
   }, [currentUser]);
 
   useEffect(() => {
-    localStorage.setItem("btc_screen", currentScreen);
+    localStorage.setItem("btc_nav_v4", currentScreen);
   }, [currentScreen]);
-
-  const save = (key, list) => setDoc(doc(db, "btc_data", key), { list });
-  const saveConfig = (newConf) => { setConfig(newConf); setDoc(doc(db, "btc_data", "config"), newConf); };
-
-  // --- AUTOMATIC PURGE OF ZERO ENTRIES FROM DATABASE ---
-  useEffect(() => {
-    if (isDbReady) {
-      const cleanBank = bankData.filter(b => Math.abs(b.amount) > 0);
-      const cleanTally = tallyData.filter(t => Math.abs(t.amount) > 0);
-      if (cleanBank.length !== bankData.length) save("bank", cleanBank);
-      if (cleanTally.length !== tallyData.length) save("tally", cleanTally);
-    }
-  }, [isDbReady, bankData.length, tallyData.length]);
 
   useEffect(() => {
     let isMounted = true;
@@ -138,6 +124,19 @@ export default function App() {
     return () => { isMounted = false; };
   }, []);
 
+  const save = (key, list) => setDoc(doc(db, "btc_data", key), { list });
+  const saveConfig = (newConf) => { setConfig(newConf); setDoc(doc(db, "btc_data", "config"), newConf); };
+
+  // DATABASE CLEANUP: Automatic purge of zero amount records
+  useEffect(() => {
+    if (isDbReady) {
+      const bClean = bankData.filter(x => Math.abs(x.amount) > 0);
+      const tClean = tallyData.filter(x => Math.abs(x.amount) > 0);
+      if (bClean.length !== bankData.length) save("bank", bClean);
+      if (tClean.length !== tallyData.length) save("tally", tClean);
+    }
+  }, [isDbReady, bankData.length, tallyData.length]);
+
   const logAudit = (action, record, details) => {
     const now = new Date();
     const timeStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth()+1).padStart(2, '0')}/${String(now.getFullYear()).slice(-2)} ${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
@@ -147,8 +146,8 @@ export default function App() {
   if (!isDbReady) return <div className="h-screen flex items-center justify-center bg-slate-900 text-white font-black animate-pulse tracking-widest uppercase">Syncing Barnala Cloud...</div>;
 
   if (!currentUser) return (
-    <div className="h-screen flex items-center justify-center bg-slate-200 p-4">
-      <div className="bg-white p-12 rounded-[3.5rem] shadow-2xl w-full max-w-sm border-t-[14px] border-slate-900 text-center font-sans">
+    <div className="h-screen flex items-center justify-center bg-slate-200 p-4 font-sans">
+      <div className="bg-white p-12 rounded-[3.5rem] shadow-2xl w-full max-w-sm border-t-[14px] border-slate-900 text-center">
         <div className="bg-slate-900 w-20 h-20 rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl"><Shield size={40} className="text-blue-400"/></div>
         <h1 className="text-2xl font-black mb-1 text-slate-900 uppercase italic tracking-tighter">{config.companyName}</h1>
         <p className="text-[10px] text-slate-400 uppercase tracking-[0.3em] mb-10 font-black italic">Security Authentication</p>
@@ -157,9 +156,9 @@ export default function App() {
           const u = usersList.find(x => x.username === e.target.u.value.toLowerCase().trim() && x.password === e.target.p.value);
           if (u) { if (u.active) { setCurrentUser(u); } else alert("Access Restricted"); } else alert("Denied");
         }}>
-          <input name="u" placeholder="OPERATOR ID" className="w-full bg-slate-50 border-0 p-5 rounded-3xl mb-4 text-center text-xs font-black tracking-widest ring-1 ring-slate-100 outline-none focus:ring-2 focus:ring-slate-900" />
+          <input name="u" placeholder="OPERATOR ID" className="w-full bg-slate-50 border-0 p-5 rounded-3xl mb-4 text-center text-xs font-black tracking-widest ring-1 ring-slate-100 outline-none focus:ring-2 focus:ring-slate-900 uppercase" />
           <input name="p" type="password" placeholder="SECURE KEY" className="w-full bg-slate-50 border-0 p-5 rounded-3xl mb-10 text-center text-xs font-black tracking-widest ring-1 ring-slate-100 outline-none focus:ring-2 focus:ring-slate-900" />
-          <button className="w-full bg-slate-900 text-white p-6 rounded-[2rem] font-black tracking-widest hover:bg-black transition-all">AUTHENTICATE</button>
+          <button className="w-full bg-slate-900 text-white p-6 rounded-[2rem] font-black tracking-widest hover:bg-black transition-all uppercase">Authenticate</button>
         </form>
       </div>
     </div>
@@ -204,15 +203,16 @@ export default function App() {
 }
 
 // ==========================================
-// SUB-MODULE: RECONCILIATION
+// SUB-MODULE: RECONCILIATION (FIXED SYNC & FILTERS)
 // ==========================================
 function ReconciliationModule({ cheques, bankData, tallyData, manualMappings, save, logAudit, config }) {
   const [q, setQ] = useState("");
+  const [f, setF] = useState("All");
   const [isSyncing, setIsSyncing] = useState(false);
   const [sort, setSort] = useState({ key: "date", dir: "desc", type: "date" });
   
   const rows = useMemo(() => {
-    let mS = new Set(), mB = new Set(), mT = new Set(), res = [];
+    let usedSys = new Set(), usedBank = new Set(), usedTally = new Set(), res = [];
     const isClose = (d1, d2) => {
       const t1 = parseToSortable(toIndianDate(d1)), t2 = parseToSortable(toIndianDate(d2));
       return t1 && t2 ? Math.abs(t1 - t2) <= (config.variance * 24 * 60 * 60 * 1000) : false;
@@ -220,32 +220,26 @@ function ReconciliationModule({ cheques, bankData, tallyData, manualMappings, sa
 
     manualMappings.forEach(m => {
       const s = cheques.find(c => c.id === m.sysId), b = bankData.find(bk => bk.id === m.bankId), t = tallyData.find(tl => tl.id === m.tallyId);
-      if (s) mS.add(s.id); if (b) mB.add(b.id); if (t) mT.add(t.id);
-      res.push({ id: m.id, date: s?.chqDate || b?.txnDate, sys: s, bank: b, tally: t, status: "MANUAL LINK", color: "bg-indigo-50", manual: true });
+      if (s) usedSys.add(s.id); if (b) usedBank.add(b.id); if (t) usedTally.add(t.id);
+      res.push({ id: m.id, date: s?.chqDate || b?.txnDate, sys: s, bank: b, tally: t, status: "MAPPED", color: "bg-indigo-50", manual: true });
     });
 
-    cheques.filter(c => !c.deleted && !mS.has(c.id)).forEach(s => {
-      const b = bankData.find(bk => {
-        if (mB.has(bk.id)) return false;
-        const amtMatch = Math.abs(bk.amount) === Math.abs(s.amount);
-        const typeMatch = (s.type === "Payment" && bk.type === "DR") || (s.type === "Receipt" && bk.type === "CR");
-        return amtMatch && typeMatch && isClose(s.chqDate, bk.txnDate);
-      });
-      const t = tallyData.find(tl => !mT.has(tl.id) && Math.abs(tl.amount) === Math.abs(s.amount) && isClose(s.chqDate, tl.date));
-      if (b) mB.add(b.id); if (t) mT.add(t.id);
+    cheques.filter(c => !c.deleted && !usedSys.has(c.id)).forEach(s => {
+      const b = bankData.find(bk => !usedBank.has(bk.id) && Math.abs(bk.amount) === Math.abs(s.amount) && ( (s.chqNo && String(bk.chqNo).includes(s.chqNo)) || isClose(s.chqDate, bk.txnDate) ));
+      const t = tallyData.find(tl => !usedTally.has(tl.id) && Math.abs(tl.amount) === Math.abs(s.amount) && isClose(s.chqDate, tl.date));
+      if (b) usedBank.add(b.id); if (t) usedTally.add(t.id);
       let st = "SYSTEM ONLY", co = "bg-white";
-      if (b && t) { st = "MATCHED"; co = "bg-green-50"; } 
-      else if (b) { st = "SYS + BANK"; co = "bg-blue-50"; } 
-      else if (t) { st = "SYS + TALLY"; co = "bg-yellow-50"; }
+      if (b && t) { st = "MATCHED"; co = "bg-green-50"; } else if (b) { st = "SYS + BANK"; co = "bg-blue-50"; } else if (t) { st = "SYS + TALLY"; co = "bg-yellow-50"; }
       res.push({ id: `s_${s.id}`, date: s.chqDate, sys: s, bank: b, tally: t, status: st, color: co });
     });
 
-    bankData.filter(b => !mB.has(b.id)).forEach(b => res.push({ id: `b_${b.id}`, date: b.txnDate, sys: null, bank: b, tally: null, status: "BANK ONLY", color: "bg-orange-50/30" }));
-    tallyData.filter(t => !mT.has(t.id)).forEach(t => res.push({ id: `t_${t.id}`, date: t.date, sys: null, bank: null, tally: t, status: "TALLY ONLY", color: "bg-purple-50/30" }));
+    bankData.filter(b => !usedBank.has(b.id)).forEach(b => res.push({ id: `b_${b.id}`, date: b.txnDate, sys: null, bank: b, tally: null, status: "BANK ONLY", color: "bg-orange-50/30" }));
+    tallyData.filter(t => !usedTally.has(t.id)).forEach(t => res.push({ id: `t_${t.id}`, date: t.date, sys: null, bank: null, tally: t, status: "TALLY ONLY", color: "bg-purple-50/30" }));
     
-    if (q) { const tm = q.toLowerCase(); res = res.filter(r => r.sys?.customer?.toLowerCase().includes(tm) || r.bank?.desc?.toLowerCase().includes(tm) || String(r.sys?.amount).includes(tm)); }
+    if (f !== "All") res = res.filter(r => r.status === f);
+    if (q) { const term = q.toLowerCase(); res = res.filter(r => r.sys?.customer?.toLowerCase().includes(term) || r.bank?.desc?.toLowerCase().includes(term) || String(r.sys?.amount).includes(term)); }
     return applySort(res, sort);
-  }, [cheques, bankData, tallyData, manualMappings, q, sort, config]);
+  }, [cheques, bankData, tallyData, manualMappings, q, f, sort, config]);
 
   const handleSync = () => {
     setIsSyncing(true);
@@ -257,10 +251,20 @@ function ReconciliationModule({ cheques, bankData, tallyData, manualMappings, sa
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-3xl font-black text-slate-800 tracking-tighter italic uppercase underline decoration-indigo-200 decoration-8 underline-offset-4">Matching Engine</h2>
         <div className="flex space-x-3">
+          <select value={f} onChange={e => setF(e.target.value)} className="border shadow p-3 rounded-xl text-xs font-black bg-white outline-none ring-1 ring-slate-100">
+             <option value="All">Show All Status</option>
+             <option value="MATCHED">Matched (3-Way)</option>
+             <option value="SYS + BANK">System + Bank</option>
+             <option value="SYS + TALLY">System + Tally</option>
+             <option value="SYSTEM ONLY">System Only</option>
+             <option value="BANK ONLY">Bank Only</option>
+             <option value="TALLY ONLY">Tally Only</option>
+             <option value="MAPPED">Manually Mapped</option>
+          </select>
           <button onClick={handleSync} className="bg-white border-2 px-6 py-2.5 rounded-xl text-sm font-black shadow flex items-center hover:bg-slate-50 transition-all shadow-indigo-100">
             <RefreshCw size={18} className={`mr-2 ${isSyncing ? 'animate-spin text-blue-600' : ''}`}/> {isSyncing ? 'Refreshing...' : 'Sync Engine'}
           </button>
-          <div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={16}/><input placeholder="Quick search..." className="pl-10 border shadow p-3 rounded-2xl text-sm w-96 outline-none focus:ring-2 focus:ring-indigo-600 transition-all" onChange={e => setQ(e.target.value)}/></div>
+          <div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={16}/><input placeholder="Search records..." className="pl-10 border shadow p-3 rounded-2xl text-sm w-80 outline-none focus:ring-2 focus:ring-indigo-600 transition-all" onChange={e => setQ(e.target.value)}/></div>
         </div>
       </div>
       <div className="bg-white rounded-[2rem] shadow-2xl flex-1 overflow-hidden flex flex-col border-0">
@@ -284,13 +288,13 @@ function ReconciliationModule({ cheques, bankData, tallyData, manualMappings, sa
             </thead>
             <tbody>
               {rows.map(r => (
-                <tr key={r.id} className={`${r.color} border-b border-slate-50 hover:brightness-95 transition-all`}>
-                  <td className="p-4 border-r border-slate-100 font-black uppercase text-[10px] tracking-tight italic">{r.status}</td>
-                  <td className="p-3 border-r border-slate-100 font-bold">{toIndianDate(r.date)}</td>
+                <tr key={r.id} className={`${r.color} border-b border-slate-50 hover:brightness-95 transition-all font-medium`}>
+                  <td className="p-4 border-r border-slate-100 font-black uppercase text-[10px] italic">{r.status}</td>
+                  <td className="p-3 border-r border-slate-100">{toIndianDate(r.date)}</td>
                   <td className="p-3 border-r border-slate-100">
                     <div className="flex flex-col">
-                      <span className="font-black text-slate-800 uppercase text-[10px]">{r.sys?.customer || "-"}</span>
-                      {r.sys && <span className={`text-[8px] font-bold ${r.sys.type==='Payment'?'text-red-400':'text-green-600'}`}>{r.sys.type} | {r.sys.chqNo}</span>}
+                       <span className="font-black text-slate-800 uppercase text-[10px] tracking-tight">{r.sys?.customer || "-"}</span>
+                       {r.sys && <span className="text-[8px] font-bold text-slate-400 italic">Chq: {r.sys.chqNo}</span>}
                     </div>
                   </td>
                   <td className="p-3 border-r border-slate-100 font-black text-right text-sm">{r.sys ? formatCurrency(r.sys.amount) : "-"}</td>
@@ -299,7 +303,7 @@ function ReconciliationModule({ cheques, bankData, tallyData, manualMappings, sa
                   <td className="p-3 border-r border-slate-100 font-bold text-slate-500 uppercase">{r.tally ? r.tally.particulars : "-"}</td>
                   <td className="p-3 border-r border-slate-100 font-black text-right text-purple-700 text-sm font-mono">{r.tally ? formatCurrency(r.tally.amount) : "-"}</td>
                   <td className="p-3 text-center">
-                    <button className="text-indigo-600 hover:scale-125 transition-all opacity-30"><Link size={18}/></button>
+                    {r.manual ? <button onClick={() => save("mappings", manualMappings.filter(m => m.id !== r.id))} className="text-red-500 hover:scale-125 transition-all"><Trash2 size={18}/></button> : <button className="text-indigo-600 hover:scale-125 transition-all opacity-30"><Link size={18}/></button>}
                   </td>
                 </tr>
               ))}
@@ -312,7 +316,7 @@ function ReconciliationModule({ cheques, bankData, tallyData, manualMappings, sa
 }
 
 // ==========================================
-// SUB-MODULE: CHEQUE REGISTER
+// SUB-MODULE: CHEQUE REGISTER (FULL RESTORE)
 // ==========================================
 function ChequeRegisterModule({ cheques, save, customers, mappings, logAudit, currentUser }) {
   const [q, setQ] = useState(""), [m, setM] = useState("All"), [y, setY] = useState("All");
@@ -332,21 +336,21 @@ function ChequeRegisterModule({ cheques, save, customers, mappings, logAudit, cu
     const valid = bulkRows.filter(r => r.cust && r.no && r.amt);
     if (!valid.length) return alert("Required: Name, Chq No, and Amount");
     const items = valid.map(v => ({ id: Date.now() + Math.random(), type: v.type, enteredAt: v.eDate, chqDate: v.cDate || v.eDate, customer: v.cust.trim(), bank: v.bank || "", chqNo: v.no, amount: Number(v.amt), status: "Pending", deleted: false }));
-    save("cheques", [...items, ...cheques]); setIsBulkOpen(false); logAudit("Data Protocol", "Register", `Batch Grid Entry`);
+    save("cheques", [...items, ...cheques]); setIsBulkOpen(false); logAudit("Register Protocol", "Grid Entry", `${items.length} records`);
   };
 
   return (
     <div className="p-8 w-full font-sans animate-in slide-in-from-bottom duration-500">
       <div className="flex justify-between items-center mb-8">
         <div className="flex items-center space-x-6">
-           <h2 className="text-3xl font-black text-slate-800 tracking-tighter italic uppercase underline decoration-indigo-200">Ledger Index</h2>
+           <h2 className="text-3xl font-black text-slate-800 tracking-tighter italic uppercase underline decoration-indigo-200 decoration-8 underline-offset-4">Ledger Index</h2>
            {sel.size > 0 && currentUser.role === "Admin" && <button onClick={() => { if(confirm(`Delete ${sel.size} records?`)){ save("cheques", cheques.map(c => sel.has(c.id)?{...c, deleted:true}:c)); setSel(new Set()); logAudit("Admin Protocol", "Register", `Bulk Deletion: ${sel.size}`); }}} className="bg-red-600 text-white px-6 py-2 rounded-2xl text-[10px] font-black shadow-xl tracking-widest uppercase">Delete Selected</button>}
         </div>
         <div className="flex space-x-3">
            <select className="border shadow p-3 rounded-xl text-xs font-black bg-white outline-none" value={m} onChange={e => setM(e.target.value)}><option value="All">All Months</option>{["01","02","03","04","05","06","07","08","09","10","11","12"].map(mo => <option key={mo}>{mo}</option>)}</select>
            <select className="border shadow p-3 rounded-xl text-xs font-black bg-white outline-none" value={y} onChange={e => setY(e.target.value)}><option value="All">All Years</option>{yrs.map(yr => <option key={yr}>{yr}</option>)}</select>
            <div className="relative"><Search className="absolute left-3 top-3.5 text-slate-300" size={16}/><input placeholder="Quick search..." className="pl-10 border shadow p-3 rounded-2xl text-sm w-48 outline-none focus:ring-2 focus:ring-indigo-600" onChange={e => setQ(e.target.value)}/></div>
-           <button onClick={() => setIsBulkOpen(true)} className="bg-blue-600 text-white px-8 py-3 rounded-2xl text-[10px] font-black shadow-xl flex items-center hover:bg-blue-700 tracking-widest uppercase"><Plus size={18} className="mr-2"/> Batch Grid Entry</button>
+           <button onClick={() => setIsBulkOpen(true)} className="bg-blue-600 text-white px-8 py-3 rounded-2xl text-[10px] font-black shadow-xl flex items-center hover:bg-blue-700 tracking-widest uppercase"><Plus size={18} className="mr-2"/> Batch Entry</button>
         </div>
       </div>
       <div className="bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border-0">
@@ -371,7 +375,7 @@ function ChequeRegisterModule({ cheques, save, customers, mappings, logAudit, cu
                 <td className="p-6 text-center"><input type="checkbox" checked={sel.has(c.id)} className="w-5 h-5 rounded-lg border-2 border-slate-100" onChange={() => { const s = new Set(sel); if(s.has(c.id)) s.delete(c.id); else s.add(c.id); setSel(s); }}/></td>
                 <td className="p-6 text-slate-300 font-bold tracking-tighter">{toIndianDate(c.enteredAt)}</td>
                 <td className="p-6 font-black text-slate-500 tracking-tighter">{toIndianDate(c.chqDate)}</td>
-                <td className="p-6"><span className={`text-[8px] px-2 py-1 rounded font-black ${c.type==='Payment'?'bg-red-50 text-red-500':'bg-green-50 text-green-600'}`}>{c.type?.toUpperCase() || 'PAYMENT'}</span></td>
+                <td className="p-6"><span className={`text-[8px] px-2 py-1 rounded font-black ${c.type==='Receipt'?'bg-green-50 text-green-600':'bg-red-50 text-red-500'}`}>{c.type?.toUpperCase() || 'PAYMENT'}</span></td>
                 <td className="p-6 font-black text-slate-800 text-base uppercase tracking-tighter">{c.customer}</td>
                 <td className="p-6 font-black text-slate-400 text-xs uppercase italic">{c.bank || "-"}</td>
                 <td className="p-6 font-mono text-indigo-600 font-black tracking-tighter">{c.chqNo}</td>
@@ -386,9 +390,9 @@ function ChequeRegisterModule({ cheques, save, customers, mappings, logAudit, cu
         </table>
       </div>
       {isBulkOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-50 p-6 font-sans">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-50 p-6">
           <div className="bg-white p-8 rounded-[3rem] shadow-2xl w-full max-w-[95%] h-[85vh] flex flex-col border-[12px] border-white shadow-indigo-900/20">
-            <h3 className="font-black text-4xl mb-8 tracking-tighter uppercase italic text-slate-800 underline decoration-indigo-200">Rapid Batch Entry</h3>
+            <h3 className="font-black text-4xl mb-8 tracking-tighter uppercase italic text-slate-800 underline decoration-indigo-200 underline-offset-4">Rapid Batch Entry</h3>
             <div className="flex-1 overflow-auto bg-slate-50 rounded-[2.5rem] p-6 shadow-inner">
               <table className="w-full text-xs text-left border-collapse">
                 <thead className="sticky top-0 bg-slate-900 text-slate-400 uppercase text-[9px] font-black z-20">
@@ -400,11 +404,11 @@ function ChequeRegisterModule({ cheques, save, customers, mappings, logAudit, cu
                       <td className="p-1"><select className="w-full p-4 border-0 font-black uppercase text-[10px]" value={r.type} onChange={e => { const n = [...bulkRows]; n[idx].type = e.target.value; setBulkRows(n); }}><option>Payment</option><option>Receipt</option></select></td>
                       <td className="p-1"><input type="date" value={r.eDate} className="w-full p-4 border-0 bg-transparent text-sm font-bold outline-none shadow-none" onChange={e => { const n = [...bulkRows]; n[idx].eDate = e.target.value; setBulkRows(n); }}/></td>
                       <td className="p-1"><input type="date" value={r.cDate} className="w-full p-4 border-0 bg-transparent text-sm font-bold outline-none shadow-none" onChange={e => { const n = [...bulkRows]; n[idx].cDate = e.target.value; setBulkRows(n); }}/></td>
-                      <td className="p-1"><input list="cust-list" value={r.cust} placeholder="Party..." className="w-full p-4 border-0 bg-transparent text-sm font-black uppercase text-slate-800 outline-none" onChange={e => { const n = [...bulkRows]; n[idx].cust = e.target.value; setBulkRows(n); }}/></td>
+                      <td className="p-1"><input list="cust-list" value={r.cust} placeholder="Party..." className="w-full p-4 border-0 bg-transparent text-sm font-black uppercase outline-none" onChange={e => { const n = [...bulkRows]; n[idx].cust = e.target.value; setBulkRows(n); }}/></td>
                       <td className="p-1"><input value={r.bank} placeholder="Bank..." className="w-full p-4 border-0 bg-transparent text-sm font-black uppercase text-slate-500 outline-none" onChange={e => { const n = [...bulkRows]; n[idx].bank = e.target.value; setBulkRows(n); }}/></td>
                       <td className="p-1"><input value={r.no} placeholder="000000" className="w-full p-4 border-0 bg-transparent text-sm font-mono font-black text-indigo-600 outline-none" onChange={e => { const n = [...bulkRows]; n[idx].no = e.target.value; setBulkRows(n); }}/></td>
                       <td className="p-1"><input type="number" value={r.amt} placeholder="₹ 0" className="w-full p-4 border-0 bg-transparent text-lg font-black text-right outline-none" onChange={e => { const n = [...bulkRows]; n[idx].amt = e.target.value; setBulkRows(n); }}/></td>
-                      <td className="p-2 text-center"><button onClick={() => setBulkRows(bulkRows.filter(x => x.id !== r.id))} className="text-red-200 hover:text-red-600 transition-all"><Trash2 size={24}/></button></td>
+                      <td className="p-2 text-center"><button onClick={() => setBulkRows(bulkRows.filter(x => x.id !== r.id))} className="text-red-200 hover:text-red-600"><Trash2 size={24}/></button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -412,41 +416,15 @@ function ChequeRegisterModule({ cheques, save, customers, mappings, logAudit, cu
               <datalist id="cust-list">{customers.map(c => <option key={c.id} value={c.name}/>)}</datalist>
               <button onClick={() => setBulkRows([...bulkRows, { id: Date.now(), type: "Payment", eDate: new Date().toISOString().split("T")[0], cDate: "", cust: "", bank: "", no: "", amt: "", status: "Pending" }])} className="mt-10 mx-auto block bg-white border-4 border-dashed border-indigo-100 text-indigo-600 font-black text-xs px-12 py-5 rounded-[2.5rem] shadow-xl">+ ADD ROW</button>
             </div>
-            <div className="flex justify-end space-x-5 pt-8"><button onClick={() => setIsBulkOpen(false)} className="px-10 py-5 rounded-[2rem] text-sm font-black text-slate-400 uppercase tracking-widest uppercase">Abort Batch</button><button onClick={saveBatch} className="bg-slate-900 text-white px-20 py-5 rounded-[2rem] text-sm font-black shadow-2xl uppercase italic tracking-widest">Commit Protocols</button></div>
+            <div className="flex justify-end space-x-5 pt-8"><button onClick={() => setIsBulkOpen(false)} className="px-10 py-5 rounded-[2rem] text-sm font-black text-slate-400 uppercase tracking-widest uppercase">Abort</button><button onClick={saveBatch} className="bg-slate-900 text-white px-20 py-5 rounded-[2rem] text-sm font-black shadow-2xl uppercase italic tracking-widest">Commit Protocols</button></div>
           </div>
-        </div>
-      )}
-      {edit && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center z-50 p-4 font-sans">
-          <form onSubmit={e => {
-            e.preventDefault(); if(!editReason.trim()) return alert("PROTOCOL: Reason for edit is mandatory!");
-            const val = { id: edit.id, type: e.target.t.value, enteredAt: edit.enteredAt, chqDate: e.target.c.value, customer: e.target.p.value.trim(), bank: e.target.b.value, chqNo: e.target.n.value, amount: Number(e.target.a.value), status: e.target.s.value, deleted: false };
-            save("cheques", cheques.map(i => i.id === edit.id ? val : i));
-            logAudit("Manual Override", "Ledger", `Target: ${val.customer} | Reasoning: ${editReason}`); setEdit(null);
-          }} className="bg-white p-10 rounded-[3rem] shadow-2xl w-full max-w-md border-t-8 border-indigo-600 space-y-4">
-            <h3 className="font-black text-2xl text-slate-800 tracking-tighter text-center uppercase italic">Adjust Protocols</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <select name="t" defaultValue={edit.type} className="w-full bg-slate-50 p-4 rounded-2xl text-sm font-bold outline-none"><option>Payment</option><option>Receipt</option></select>
-              <input name="c" type="date" defaultValue={edit.chqDate} className="w-full bg-slate-50 p-4 rounded-2xl text-sm font-bold outline-none"/>
-            </div>
-            <input name="p" defaultValue={edit.customer} required className="w-full bg-slate-50 p-4 rounded-2xl text-sm font-black uppercase outline-none"/>
-            <input name="b" placeholder="Bank" defaultValue={edit.bank} className="w-full bg-slate-50 p-4 rounded-2xl text-sm font-black uppercase outline-none"/>
-            <input name="n" defaultValue={edit.chqNo} required className="w-full bg-slate-50 p-4 rounded-2xl text-sm font-black font-mono outline-none text-indigo-600"/>
-            <input name="a" type="number" defaultValue={edit.amount} required className="w-full bg-slate-50 p-4 rounded-2xl text-xl font-black outline-none text-right"/>
-            <select name="s" defaultValue={edit.status} className="w-full bg-slate-50 p-4 rounded-2xl text-sm font-black outline-none uppercase tracking-widest"><option>Pending</option><option>Cleared</option></select>
-            <div className="bg-yellow-50 p-5 rounded-3xl border-2 border-yellow-200 mt-2 shadow-inner">
-              <label className="text-[9px] font-black text-yellow-700 uppercase flex items-center mb-1 tracking-widest"><AlertTriangle size={12} className="mr-2"/> Protocol Trace: Reason Required</label>
-              <input value={editReason} onChange={e=>setEditReason(e.target.value)} required placeholder="Required for Audit..." className="w-full bg-white p-3 rounded-xl text-xs font-black border-0 outline-none ring-2 ring-yellow-400/50 shadow-inner"/>
-            </div>
-            <div className="flex justify-end space-x-3 pt-2"><button type="button" onClick={() => setEdit(null)} className="px-6 py-4 rounded-2xl text-xs font-bold text-slate-400 tracking-widest uppercase">Abort</button><button disabled={!editReason.trim()} className={`bg-indigo-600 text-white px-10 py-4 rounded-2xl text-xs font-black shadow-xl tracking-widest italic uppercase ${!editReason.trim() ? 'opacity-20' : ''}`}>COMMIT</button></div>
-          </form>
         </div>
       )}
     </div>
   );
 }
 
-// --- SYSTEM MODULES ---
+// --- REMAINING SUB-MODULES ---
 
 function DashboardModule({ active, bankCount, tallyCount }) {
   const cleared = active.filter(c => c.status === "Cleared").reduce((s, c) => s + Number(c.amount || 0), 0);
@@ -483,7 +461,7 @@ function UploadModule({ bankData, tallyData, save, logAudit }) {
           const id = row["Transaction ID"] || row["Ref No"], amt = parseFloat(row["Transaction Amount(INR)"] || row["Amount"] || 0);
           if (!id || amt === 0 || isNaN(amt)) return;
           if (nl.some(b => String(b.id) === String(id))) dp++;
-          else { nl.push({ id: String(id), txnDate: formatExcelDate(row["Value Date"]), desc: String(row["Description"] || ""), chqNo: String(row["ChequeNo."] || ""), amount: amt, type: String(row["Cr/Dr"] || "").toUpperCase() === "DR" ? "DR" : "CR" }); add++; }
+          else { nl.push({ id: String(id), txnDate: formatExcelDate(row["Value Date"]), desc: String(row["Description"] || ""), chqNo: String(row["ChequeNo."] || ""), amount: Math.abs(amt), type: String(row["Cr/Dr"] || "").toUpperCase() === "DR" ? "DR" : "CR" }); add++; }
         }); save("bank", nl);
       } else {
         const hIdx = rows.findIndex(r => r.some(c => String(c).toLowerCase().includes("particulars")));
@@ -496,37 +474,23 @@ function UploadModule({ bankData, tallyData, save, logAudit }) {
           const vn = row["Vch No."], amt = parseFloat(row["Debit"] || row["Credit"] || 0);
           if (!vn || amt === 0 || isNaN(amt)) return;
           if (nl.some(tl => String(tl.vchNo) === String(vn))) dp++;
-          else { nl.push({ id: vn, date: formatExcelDate(row["Date"]), particulars: String(row["Particulars"] || ""), vchNo: vn, amount: amt }); add++; }
+          else { nl.push({ id: vn, date: formatExcelDate(row["Date"]), particulars: String(row["Particulars"] || ""), vchNo: vn, amount: Math.abs(amt) }); add++; }
         }); save("tally", nl);
       }
-      alert(`Success: ${add} New Records.`); logAudit("Protocol Sync", t==="B"?"Bank":"Tally", `Sync Complete`);
+      alert(`Complete: ${add} New Records.`); logAudit("Protocol Sync", t==="B"?"Bank":"Tally", `Sync Complete`);
     }; r.readAsBinaryString(f);
   };
   return (
     <div className="p-20 grid grid-cols-2 gap-16 max-w-7xl mx-auto font-sans">
       <div className="bg-white p-16 rounded-[4rem] shadow-2xl border-t-[20px] border-orange-500 relative text-center">
         <button onClick={() => confirm("Wipe Bank?") && save("bank", [])} className="absolute top-6 right-6 text-red-500 hover:scale-150 transition-all"><Trash size={28}/></button>
-        <UploadCloud size={100} className="text-orange-500 mb-8 mx-auto"/><h3 className="text-3xl font-black uppercase mb-4 text-slate-800 underline decoration-orange-100">Bank Statement</h3>
+        <UploadCloud size={100} className="text-orange-500 mb-8 mx-auto"/><h3 className="text-3xl font-black italic tracking-tighter uppercase mb-4 text-slate-800 underline decoration-orange-100">Bank Statement</h3>
         <input type="file" onChange={e => up(e, "B")} className="text-xs border-4 border-dashed border-slate-100 p-10 rounded-[2.5rem] w-full bg-slate-50 cursor-pointer font-black"/>
       </div>
       <div className="bg-white p-16 rounded-[4rem] shadow-2xl border-t-[20px] border-purple-500 relative text-center">
         <button onClick={() => confirm("Wipe Tally?") && save("tally", [])} className="absolute top-6 right-6 text-red-500 hover:scale-150 transition-all"><Trash size={28}/></button>
-        <FileSpreadsheet size={100} className="text-purple-500 mb-8 mx-auto"/><h3 className="text-3xl font-black uppercase mb-4 text-slate-800 underline decoration-purple-100">Tally Ledger</h3>
+        <FileSpreadsheet size={100} className="text-purple-500 mb-8 mx-auto"/><h3 className="text-3xl font-black italic tracking-tighter uppercase mb-4 text-slate-800 underline decoration-purple-100">Tally Ledger</h3>
         <input type="file" onChange={e => up(e, "T")} className="text-xs border-4 border-dashed border-slate-100 p-10 rounded-[2.5rem] w-full bg-slate-50 cursor-pointer font-black"/>
-      </div>
-    </div>
-  );
-}
-
-function SettingsModule({ config, saveConfig, logAudit }) {
-  const [n, setN] = useState(config.companyName), [v, setV] = useState(config.variance);
-  return (
-    <div className="p-10 max-w-2xl mx-auto font-sans">
-      <h2 className="text-3xl font-black mb-8 italic tracking-tighter uppercase underline decoration-indigo-200 decoration-8">Protocol Configuration</h2>
-      <div className="bg-white p-12 rounded-[3.5rem] shadow-2xl border-t-[16px] border-slate-900 space-y-10">
-         <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-3 ml-4 italic">Global Display ID</label><input value={n} onChange={e=>setN(e.target.value)} className="w-full bg-slate-50 p-6 rounded-3xl text-xl font-black ring-1 ring-slate-100 outline-none shadow-inner uppercase tracking-tighter"/></div>
-         <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-3 tracking-widest ml-4 italic">Precision Window (Variance Days)</label><input type="number" value={v} onChange={e=>setV(Number(e.target.value))} className="w-full bg-slate-50 p-6 rounded-3xl text-xl font-black ring-1 ring-slate-100 outline-none shadow-inner"/></div>
-         <button onClick={()=>{ saveConfig({companyName: n, variance: v}); alert("Saved!"); logAudit("Override", "Config", `Updated Variance: ${v}`); }} className="w-full bg-slate-900 text-white p-8 rounded-[2.5rem] font-black tracking-[0.4em] hover:bg-black transition-all shadow-2xl uppercase italic text-sm">Save Global Parameters</button>
       </div>
     </div>
   );
@@ -542,7 +506,7 @@ function MasterCustomersModule({ customers, save, logAudit }) {
   };
   return (
     <div className="p-10 max-w-2xl mx-auto font-sans">
-      <div className="flex justify-between items-center mb-10"><h2 className="text-4xl font-black italic tracking-tighter uppercase underline decoration-indigo-200">Client Index</h2><label className="bg-indigo-600 text-white px-8 py-4 rounded-3xl cursor-pointer text-[10px] font-black shadow-xl hover:bg-indigo-700 uppercase italic shadow-indigo-900/10"><FileUp size={18} className="inline mr-3"/> Import Master<input type="file" className="hidden" onChange={up}/></label></div>
+      <div className="flex justify-between items-center mb-10"><h2 className="text-4xl font-black italic tracking-tighter uppercase underline decoration-indigo-200 decoration-8 underline-offset-[-2px]">Client Index</h2><label className="bg-indigo-600 text-white px-8 py-4 rounded-3xl cursor-pointer text-[10px] font-black shadow-xl hover:bg-indigo-700 uppercase italic shadow-indigo-900/10"><FileUp size={18} className="inline mr-3"/> Import Master<input type="file" className="hidden" onChange={up}/></label></div>
       <div className="bg-white border-0 shadow-2xl rounded-[3rem] overflow-auto max-h-[70vh] border-8 border-white shadow-indigo-900/10">
         {customers.map(c => <div key={c.id} className="p-8 border-b border-slate-50 flex justify-between hover:bg-slate-50 transition-all font-black text-slate-700 italic tracking-tighter text-xl uppercase italic"><span>{c.name}</span><button onClick={() => {if(confirm("Delete Customer?")) save("customers", customers.filter(i => i.id !== c.id));}} className="text-red-200 hover:text-red-500 transition-all hover:scale-125"><Trash2 size={24}/></button></div>)}
       </div>
@@ -562,12 +526,12 @@ function UserManagementModule({ usersList, save, logAudit }) {
         </table>
       </div>
       {m && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-50 p-4 shadow-none">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
           <form onSubmit={e => {
             e.preventDefault(); const u = { id: m.id || Date.now(), username: e.target.u.value.toLowerCase().trim(), name: e.target.n.value.trim(), role: e.target.r.value, password: e.target.p.value, active: e.target.a.checked };
             save("users", m.id ? usersList.map(i => i.id === m.id ? u : i) : [...usersList, u]); setM(null); logAudit("Identity Protocol", "Security", `Modified access: ${u.username}`);
           }} className="bg-white p-12 rounded-[4rem] shadow-2xl w-full max-w-sm space-y-5 border-t-[20px] border-slate-900 font-sans shadow-indigo-900/10">
-            <h3 className="font-black text-3xl text-slate-800 tracking-tighter italic mb-4 uppercase tracking-[0.1em] shadow-none">Security Key</h3>
+            <h3 className="font-black text-3xl text-slate-800 tracking-tighter italic mb-4 uppercase">Security Key</h3>
             <input name="u" placeholder="ID" defaultValue={m.username} required className="w-full bg-slate-50 p-5 rounded-3xl text-xs font-black outline-none tracking-widest ring-2 ring-slate-100 shadow-inner uppercase"/>
             <input name="n" placeholder="Operator Name" defaultValue={m.name} required className="w-full bg-slate-50 p-5 rounded-3xl text-xs font-black outline-none tracking-widest ring-2 ring-slate-100 shadow-inner uppercase"/>
             <input name="p" placeholder="Protocol Key" defaultValue={m.password} required className="w-full bg-slate-50 p-5 rounded-3xl text-xs font-black outline-none tracking-widest ring-2 ring-slate-100 shadow-inner"/>
@@ -581,6 +545,20 @@ function UserManagementModule({ usersList, save, logAudit }) {
   );
 }
 
+function SettingsModule({ config, saveConfig, logAudit }) {
+  const [n, setN] = useState(config.companyName), [v, setV] = useState(config.variance);
+  return (
+    <div className="p-10 max-w-2xl mx-auto font-sans">
+      <h2 className="text-3xl font-black mb-8 italic tracking-tighter uppercase underline decoration-indigo-200 decoration-8">Configuration</h2>
+      <div className="bg-white p-12 rounded-[3.5rem] shadow-2xl border-t-[16px] border-slate-900 space-y-10">
+         <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-3 ml-4 italic">Global Display ID</label><input value={n} onChange={e=>setN(e.target.value)} className="w-full bg-slate-50 p-6 rounded-3xl text-xl font-black ring-1 ring-slate-100 outline-none uppercase shadow-inner"/></div>
+         <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-3 ml-4 italic">Window (Variance Days)</label><input type="number" value={v} onChange={e=>setV(Number(e.target.value))} className="w-full bg-slate-50 p-6 rounded-3xl text-xl font-black ring-1 ring-slate-100 outline-none shadow-inner"/></div>
+         <button onClick={()=>{ saveConfig({companyName: n, variance: v}); alert("Saved!"); logAudit("Override", "Config", `Updated Window: ${v}`); }} className="w-full bg-slate-900 text-white p-8 rounded-[2.5rem] font-black tracking-widest hover:bg-black uppercase italic text-sm">Save Global Parameters</button>
+      </div>
+    </div>
+  );
+}
+
 function AuditTrailModule({ auditTrail }) {
   const sortedAudit = useMemo(() => applySort(auditTrail, { key: "id", dir: "desc", type: "number" }), [auditTrail]);
   return (
@@ -589,7 +567,7 @@ function AuditTrailModule({ auditTrail }) {
       <div className="bg-white border-0 shadow-2xl rounded-[4rem] overflow-hidden flex-1 border-[16px] border-white shadow-indigo-900/10">
         <div className="overflow-auto h-full">
           <table className="w-full text-left">
-            <thead className="bg-slate-900 text-slate-500 sticky top-0 uppercase tracking-widest text-[9px] font-black z-10 font-sans tracking-tighter shadow-xl"><tr><th className="p-6">Security Timestamp</th><th className="p-6 tracking-[0.2em]">Verified Identity</th><th className="p-6 text-indigo-400">Class Protocol</th><th className="p-6 tracking-[0.2em]">Audit reasoning</th></tr></thead>
+            <thead className="bg-slate-900 text-slate-500 sticky top-0 uppercase tracking-widest text-[9px] font-black z-10 tracking-tighter shadow-xl"><tr><th className="p-6">Security Timestamp</th><th className="p-6">Verified Identity</th><th className="p-6 text-indigo-400">Class Protocol</th><th className="p-6">Audit reasoning</th></tr></thead>
             <tbody>{sortedAudit.map(l => (<tr key={l.id} className="border-b border-slate-50 hover:bg-slate-50 transition-all italic font-black text-[12px] text-slate-600 tracking-tighter"><td className="p-6 text-slate-400 font-mono tracking-tighter text-xs">{l.time}</td><td className="p-6 text-slate-800 uppercase tracking-tighter font-black underline decoration-slate-100 underline-offset-4">{l.user}</td><td className="p-6 text-indigo-600 tracking-widest uppercase text-[10px] italic">{l.action}</td><td className="p-6 text-slate-500 leading-relaxed uppercase text-[10px]">{l.record}: <span className="text-slate-800 font-black italic bg-slate-50/50 px-2 py-0.5 rounded underline decoration-indigo-50 decoration-4 underline-offset-[-1px]">{l.details}</span></td></tr>))}</tbody>
           </table>
         </div>
